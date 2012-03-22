@@ -1,3 +1,4 @@
+import os, re
 from django.db import transaction
 from django.utils.translation import ugettext_lazy as _
 from django.core.urlresolvers import reverse
@@ -12,6 +13,18 @@ from django.http import HttpResponse, Http404
 from django.conf.urls.defaults import patterns, url
 from django.views.decorators.csrf import csrf_protect
 
+def generate_templates_tuple(path, match):
+    choices = []
+    match_re = re.compile(match)
+    try:
+        for f in sorted(os.listdir(path)):
+            full_file = os.path.join(path, f)
+            relative_file = os.path.join('flatpages',f )
+            if os.path.isfile(full_file) and (match is None or match_re.search(f)):
+                choices.append((relative_file, f))
+    except OSError:
+        pass
+    return choices
 
 class FlatPageAdmin(flatpages_admin.FlatPageAdmin):
     # @csrf_protect
@@ -41,7 +54,7 @@ class FlatPageAdmin(flatpages_admin.FlatPageAdmin):
             url(r'^ajax-save/$', self.admin_site.admin_view(self.ajax_save), name='flatpages_ajax_save'),
         )
         return my_urls + urls
-
+        
     def formfield_for_dbfield(self, db_field, **kwargs):
         if db_field.name == 'content':
             if settings.USE_ADMIN_AREA_TINYMCE:
@@ -51,12 +64,10 @@ class FlatPageAdmin(flatpages_admin.FlatPageAdmin):
                     ))
         elif db_field.name == "template_name":
             prev_field = super(FlatPageAdmin, self).formfield_for_dbfield(db_field, **kwargs)
-            return forms.FilePathField(label=prev_field.label,
-                                       path=settings.TEMPLATE_DIR,
-                                       required=False,
-                                       recursive=False,
-                                       match=settings.TEMPLATE_FILES_REGEXP,
-                                       )
+            return forms.ChoiceField(
+                label=prev_field.label, 
+                choices=generate_templates_tuple(settings.TEMPLATE_DIR, settings.TEMPLATE_FILES_REGEXP)
+            )
         return super(FlatPageAdmin, self).formfield_for_dbfield(db_field, **kwargs)
     # redefining
     fieldsets = (
